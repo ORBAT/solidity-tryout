@@ -11,7 +11,7 @@ contract TemperatureOracle {
 	}
 
 	function setTemperature(int8 temperature) external returns (bool success) {
-		if(msg.sender != owner) { // only owner can set temperature
+		if(msg.sender != owner) { // only the owner can set the temperature
 			return false;
 		}
 
