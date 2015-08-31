@@ -45,6 +45,9 @@ contract WeatherBet {
 		return -n;
 	}
 
+
+	// 0xa7c8b790c94c496894ec617208aee8be48519dda points to temp oracle on test net
+
 	/// @notice Will create a new weather bet between `bettor1` and `bettor2` 
 	/// that will be resolved on `_betEnd` using temperature oracle at `_tempOracle`.
 	function WeatherBet(uint _betEnd, address _tempOracle, address bettor1, address bettor2) {
