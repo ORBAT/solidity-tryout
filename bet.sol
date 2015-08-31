@@ -1,21 +1,22 @@
 contract TemperatureOracle {
-	int8 internal temperature;
+	mapping (uint => int8) temperatureForTime;
 	address owner;
 
 	function TemperatureOracle(address _owner) {
 		owner = _owner;
 	}
 
-	function getTemperature() external constant returns (int8) {
-		return temperature;
+	function getTemperature(uint time) external constant returns (int8) {
+		return temperatureForTime[time - (time % (60*60))];
 	}
 
-	function setTemperature(int8 newTemperature) external returns (bool success) {
+	function setTemperature(int8 temperature) external returns (bool success) {
 		if(msg.sender != owner) { // only owner can set temperature
 			return false;
 		}
 
-		temperature = newTemperature;
+		temperatureForTime[now - (now % (60*60))] = temperature;
+
 		return true;
 	}
 }
@@ -26,62 +27,76 @@ contract WeatherBet {
 
 	struct Bet {
 		address bettor;
-		int8 betTemperature;
-		uint amount;
+		int8 temperature;
+		uint value;
 	}
+
+	bool private betOver;
+	
+	Bet private bet1;
+	Bet private bet2;
 
 	uint private betEnd;
-	string private location;
-	TemperatureOracle private tempOracle;
 	
-	bool private betOver;
+	TemperatureOracle private tempOracle;
 
-	Bet[] private bets;
-	uint private n_bets;
-
-	address[] private winners;
-	mapping (address => bool) didWin;
-	uint private n_winners;
-
-
-	/// @param _betEnd day for which the bet is (in UNIX/POSIX time)
-	/// @param _tempOracle address for the TemperatureOracle all parties have agreed to
-	/// @notice Will create a new weather bet for `_location`, end timestamp `_betEnd` and temperature oracle `_tempOracle`
-	function WeatherBet(uint _betEnd, string _location, address _tempOracle) {
-		betEnd = _betEnd;
-		tempOracle = TemperatureOracle(_tempOracle);
+	function abs(int8 n) internal constant returns (int8) {
+		if(n >= 0) return n;
+		return -n;
 	}
 
-	function smallestDifference() internal constant returns (int8) {
-		
+	/// @notice Will create a new weather bet between `bettor1` and `bettor2` 
+	/// that will be resolved on `_betEnd` using temperature oracle at `_tempOracle`.
+	function WeatherBet(uint _betEnd, address _tempOracle, address bettor1, address bettor2) {
+		betEnd = _betEnd;
+		tempOracle = TemperatureOracle(_tempOracle);
+		bet1.bettor = bettor1;
+		bet2.bettor = bettor2;
 	}
 
 	function endBet() external returns (bool isOver) {
-		if(isBetOver()) return true;
 		if(now < betEnd) return false;
+		if(betOver) return true;
 		
-		int8 currentTemperature = tempOracle.getTemperature();
+		int8 temperature = tempOracle.getTemperature(betEnd);
+		int8 bet1Diff = abs(temperature - bet1.temperature);
+		int8 bet2Diff = abs(temperature - bet2.temperature);
+		
+		uint gasCost = tx.gasprice * 500;
 
-		Bet bet;
+		uint payOut = address(this).balance - gasCost;
 
-		for(var i = 0; i < n_bets; i++) {
-			bet = bets[i];
-			if(bet.betTemperature >= )
+		if(bet1Diff == bet2Diff) { // both bets are equally close, reimburse bets
+			bet1.bettor.send(bet1.value - gasCost);
+			bet2.bettor.send(bet2.value - gasCost);
+		} else if(bet1Diff < bet2Diff) { // bet 1 is closer
+			bet1.bettor.send(payOut);
+		} else { // bet 2 is closer
+			bet2.bettor.send(payOut);
 		}
-
+		
 		betOver = true;
 		return true;
 	}
 
-	function betOn(int8 temperature) external returns (bool successful) {
-		if(isBetOver()) return false;
-		bets.length = n_bets + 1;
-		bets[n_bets] = Bet({bettor: msg.sender, betTemperature: temperature, amount: msg.value});
-		n_bets++;
-		return true;
-	}
 
-	function isBetOver() constant returns (bool) {
-		return betOver;
+	function betOn(int8 temperature) external returns (bool successful) {
+		if(betOver) return false;
+		
+		if(msg.sender == bet1.bettor) {
+			if(bet1.temperature != 0) return false;
+			bet1.temperature = temperature;
+			bet1.value = msg.value;
+			return true;
+		}
+
+		if(msg.sender == bet2.bettor) {
+			if(bet2.temperature != 0) return false;
+			bet2.temperature = temperature;
+			bet2.value = msg.value;
+			return true;
+		}
+
+		return false;
 	}
 }
