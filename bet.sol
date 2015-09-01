@@ -46,6 +46,14 @@ contract WeatherBet {
 	}
 
 
+	function kill() external {
+		if(msg.sender != bet1.bettor && msg.sender != bet2.bettor) return;
+		uint gasCost = tx.gasprice * 500;
+		bet1.bettor.send(bet1.value - gasCost);
+		bet2.bettor.send(bet2.value - gasCost);
+		suicide(msg.sender);
+	}
+
 	// 0xa7c8b790c94c496894ec617208aee8be48519dda points to temp oracle on test net
 
 	/// @notice Will create a new weather bet between `bettor1` and `bettor2` 
