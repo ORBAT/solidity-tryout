@@ -1,113 +1,142 @@
 contract TemperatureOracle {
-	mapping (uint => int8) temperatureForTime;
-	address owner;
+  mapping (uint => int8) hourlyTemperatures;
 
-	function TemperatureOracle(address _owner) {
-		owner = _owner;
-	}
+  address owner;
+  uint256 fee;
 
-	function getTemperature(uint time) external constant returns (int8) {
-		return temperatureForTime[time - (time % (60*60))];
-	}
+  function TemperatureOracle(uint256 _fee) {
+      owner = msg.sender;
+      fee = _fee;
+  }
 
-	function setTemperature(int8 temperature) external returns (bool success) {
-		if(msg.sender != owner) { // only the owner can set the temperature
-			return false;
-		}
+  function set(int8 temperature) {
+      if (owner == msg.sender)
+          hourlyTemperatures[now - (now % 3600)] = temperature;
+  }
 
-		temperatureForTime[now - (now % (60*60))] = temperature;
+  function setFee(uint256 f) {
+      if (owner == msg.sender)
+          fee = f;
+  }
 
-		return true;
-	}
+  function get(uint time) returns (int8 v) {
+      if (msg.value >= fee)
+          v = hourlyTemperatures[time - (time % 3600)];
+      else
+          v = 0;
+  }
+
+  function getFee() constant returns (uint256) {
+      return fee;
+  }
 }
-
 
 
 contract WeatherBet {
 
-	struct Bet {
-		address bettor;
-		int8 temperature;
-		uint value;
-	}
+  struct Bettor {
+    address addr;
+    int8 temperature;
+    uint value;
+  }
 
-	bool private betOver;
-	
-	Bet private bet1;
-	Bet private bet2;
+  bool private winnerPaid;
+  
+  Bettor private bettor1;
+  Bettor private bettor2;
 
-	uint private betEnd;
-	
-	TemperatureOracle private tempOracle;
+  uint private betEndTime;
 
-	function abs(int8 n) internal constant returns (int8) {
-		if(n >= 0) return n;
-		return -n;
-	}
+  // 0xa7c8b790c94c496894ec617208aee8be48519dda in test net
+  TemperatureOracle private tempOracle;
 
+  function abs(int8 n) internal constant returns (int8) {
+    if(n >= 0) return n;
+    return -n;
+  }
 
-	function kill() external {
-		if(msg.sender != bet1.bettor && msg.sender != bet2.bettor) return;
-		uint gasCost = tx.gasprice * 500;
-		bet1.bettor.send(bet1.value - gasCost);
-		bet2.bettor.send(bet2.value - gasCost);
-		suicide(msg.sender);
-	}
+  // end bet and reimburse both bets
+  function kill() external {
+    if(msg.sender != bettor1.addr && msg.sender != bettor2.addr) return;
+    bettor1.addr.send(bettor1.value);
+    bettor2.addr.send(bettor2.value);
+    suicide(msg.sender);
+  }
 
-	// 0xa7c8b790c94c496894ec617208aee8be48519dda points to temp oracle on test net
+  /// @notice Will create a new weather bet between `bettor1` and `bettor2` 
+  /// that will be resolved at `_betEndTime` using temperature oracle at `_tempOracle`.
+  function WeatherBet(uint _betEndTime, address _tempOracle, address bettor1, address bettor2) {
+    betEndTime = _betEndTime;
+    tempOracle = TemperatureOracle(_tempOracle);
+    bettor1.addr = bettor1;
+    bettor2.addr = bettor2;
+  }
 
-	/// @notice Will create a new weather bet between `bettor1` and `bettor2` 
-	/// that will be resolved on `_betEnd` using temperature oracle at `_tempOracle`.
-	function WeatherBet(uint _betEnd, address _tempOracle, address bettor1, address bettor2) {
-		betEnd = _betEnd;
-		tempOracle = TemperatureOracle(_tempOracle);
-		bet1.bettor = bettor1;
-		bet2.bettor = bettor2;
-	}
+  function isBetOver() constant returns (bool) {
+    return winnerPaid;
+  }
 
-	function endBet() external returns (bool isOver) {
-		if(now < betEnd) return false;
-		if(betOver) return true;
-		
-		int8 temperature = tempOracle.getTemperature(betEnd);
-		int8 bet1Diff = abs(temperature - bet1.temperature);
-		int8 bet2Diff = abs(temperature - bet2.temperature);
-		
-		uint gasCost = tx.gasprice * 500;
+  function payWinner() external {
+    // the bet still has time left
+    if(now < betEndTime) return;
+    // the bet's already over and winner has been paid
+    if(winnerPaid) return;
 
-		uint payOut = address(this).balance - gasCost;
+    int8 temperature = tempOracle.getTemperature(betEndTime);
 
-		if(bet1Diff == bet2Diff) { // both bets are equally close, reimburse bets
-			bet1.bettor.send(bet1.value - gasCost);
-			bet2.bettor.send(bet2.value - gasCost);
-		} else if(bet1Diff < bet2Diff) { // bet 1 is closer
-			bet1.bettor.send(payOut);
-		} else { // bet 2 is closer
-			bet2.bettor.send(payOut);
-		}
-		
-		betOver = true;
-		return true;
-	}
+    int8 bet1Diff = abs(temperature - bettor1.temperature);
+    int8 bet2Diff = abs(temperature - bettor2.temperature);
+    
+    // the winner gets the whole balance of the contract
+    uint payOut = address(this).balance;
 
+    // both bets are equally close, reimburse bets
+    if(bet1Diff == bet2Diff) {
+      bettor1.addr.send(bettor1.value);
+      bettor2.addr.send(bettor2.value);
+    // bet 1 is closer
+    } else if(bet1Diff < bet2Diff) {
+      bettor1.addr.send(payOut);
+    // bet 2 must be the closest
+    } else {
+      bettor2.addr.send(payOut);
+    }
+    
+    winnerPaid = true;
+    return;
+  }
 
-	function betOn(int8 temperature) external returns (bool successful) {
-		if(betOver) return false;
-		
-		if(msg.sender == bet1.bettor) {
-			if(bet1.temperature != 0) return false;
-			bet1.temperature = temperature;
-			bet1.value = msg.value;
-			return true;
-		}
+  function betOn(int8 temperature) external {
+    // bet already over, reimburse sent value
+    if(winnerPaid) {
+      msg.sender.send(msg.value);
+      return;
+    }
+    
+    // message was sent by bettor 1
+    if(msg.sender == bettor1.addr) {
+      
+      // bettor 1 has already made a bet
+      if(bettor1.temperature != 0) {
+        msg.sender.send(msg.value);
+        return;
+      }
 
-		if(msg.sender == bet2.bettor) {
-			if(bet2.temperature != 0) return false;
-			bet2.temperature = temperature;
-			bet2.value = msg.value;
-			return true;
-		}
+      bettor1.temperature = temperature;
+      bettor1.value = msg.value;
+    // message was sent by bettor 1
+    } else if(msg.sender == bettor2.addr) {
+      
+      // bettor 2 has already made a bet
+      if(bettor2.temperature != 0) {
+        msg.sender.send(msg.value);
+        return;
+      }
 
-		return false;
-	}
+      bettor2.temperature = temperature;
+      bettor2.value = msg.value;
+    }
+    // message wasn't sent by either bettor, return the money.
+    msg.sender.send(msg.value);
+  }
 }
