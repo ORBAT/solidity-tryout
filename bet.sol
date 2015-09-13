@@ -1,33 +1,19 @@
 contract TemperatureOracle {
   mapping (uint => int8) hourlyTemperatures;
-
+  
   address owner;
-  uint256 fee;
 
-  function TemperatureOracle(uint256 _fee) {
-      owner = msg.sender;
-      fee = _fee;
+  function TemperatureOracle() {
+    owner = msg.sender;
   }
 
   function set(int8 temperature) {
-      if (owner == msg.sender)
-          hourlyTemperatures[now - (now % 3600)] = temperature;
+    if (owner == msg.sender)
+      hourlyTemperatures[now - (now % 3600)] = temperature;
   }
 
-  function setFee(uint256 f) {
-      if (owner == msg.sender)
-          fee = f;
-  }
-
-  function get(uint time) returns (int8 v) {
-      if (msg.value >= fee)
-          v = hourlyTemperatures[time - (time % 3600)];
-      else
-          v = 0;
-  }
-
-  function getFee() constant returns (uint256) {
-      return fee;
+  function get(uint time) constant returns (int8) {
+    return hourlyTemperatures[time - (time % 3600)];
   }
 }
 
@@ -47,7 +33,7 @@ contract WeatherBet {
 
   uint private betEndTime;
 
-  // 0xa7c8b790c94c496894ec617208aee8be48519dda in test net
+  // 0x56f4a306023c0932717d55405d50ce72da2cd688 in test net
   TemperatureOracle private tempOracle;
 
   function abs(int8 n) internal constant returns (int8) {
@@ -63,17 +49,29 @@ contract WeatherBet {
     suicide(msg.sender);
   }
 
-  /// @notice Will create a new weather bet between `bettor1` and `bettor2` 
-  /// that will be resolved at `_betEndTime` using temperature oracle at `_tempOracle`.
-  function WeatherBet(uint _betEndTime, address _tempOracle, address bettor1, address bettor2) {
+  // Create a new weather bet between bettor1 and bettor2 that will be resolved at _betEndTime
+  // using temperature oracle at `_tempOracle`.
+  function WeatherBet(uint _betEndTime, address _tempOracle, address _bettor1, address _bettor2) {
     betEndTime = _betEndTime;
     tempOracle = TemperatureOracle(_tempOracle);
-    bettor1.addr = bettor1;
-    bettor2.addr = bettor2;
+    bettor1.addr = _bettor1;
+    bettor2.addr = _bettor2;
+    bettor1.temperature = 0;
+    bettor2.temperature = 0;
   }
 
-  function isBetOver() constant returns (bool) {
-    return winnerPaid;
+  function b2() constant returns (int8 temp, address addr, uint value) {
+    temp = bettor2.temperature;
+    addr = bettor2.addr;
+    value = bettor2.value;
+    return;
+  }
+
+  function b1() constant returns (int8 temp, address addr, uint value) {
+    temp = bettor1.temperature;
+    addr = bettor1.addr;
+    value = bettor1.value;
+    return;
   }
 
   function payWinner() external {
@@ -82,7 +80,7 @@ contract WeatherBet {
     // the bet's already over and winner has been paid
     if(winnerPaid) return;
 
-    int8 temperature = tempOracle.getTemperature(betEndTime);
+    int8 temperature = tempOracle.get(betEndTime);
 
     int8 bet1Diff = abs(temperature - bettor1.temperature);
     int8 bet2Diff = abs(temperature - bettor2.temperature);
@@ -107,36 +105,23 @@ contract WeatherBet {
   }
 
   function betOn(int8 temperature) external {
-    // bet already over, reimburse sent value
-    if(winnerPaid) {
+    if(winnerPaid || now > betEndTime) {
+      // bet already over, reimburse sent value
       msg.sender.send(msg.value);
       return;
     }
     
-    // message was sent by bettor 1
     if(msg.sender == bettor1.addr) {
-      
-      // bettor 1 has already made a bet
-      if(bettor1.temperature != 0) {
-        msg.sender.send(msg.value);
-        return;
-      }
-
+      // message was sent by bettor 1
       bettor1.temperature = temperature;
       bettor1.value = msg.value;
-    // message was sent by bettor 1
-    } else if(msg.sender == bettor2.addr) {
-      
-      // bettor 2 has already made a bet
-      if(bettor2.temperature != 0) {
-        msg.sender.send(msg.value);
-        return;
-      }
-
+    } else if(msg.sender == bettor2.addr) {      
+      // message was sent by bettor 1
       bettor2.temperature = temperature;
       bettor2.value = msg.value;
+    } else {
+      // message wasn't sent by either bettor, return the money.
+      msg.sender.send(msg.value);
     }
-    // message wasn't sent by either bettor, return the money.
-    msg.sender.send(msg.value);
   }
 }
