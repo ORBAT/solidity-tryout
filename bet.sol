@@ -43,10 +43,11 @@ contract WeatherBet {
 
   // end bet and reimburse both bets
   function kill() external {
+    // only bettor1 or bettor2 can end the bet
     if(msg.sender != bettor1.addr && msg.sender != bettor2.addr) return;
     bettor1.addr.send(bettor1.value);
     bettor2.addr.send(bettor2.value);
-    suicide(msg.sender);
+    suicide();
   }
 
   // Create a new weather bet between bettor1 and bettor2 that will be resolved at _betEndTime
@@ -60,18 +61,8 @@ contract WeatherBet {
     bettor2.temperature = 0;
   }
 
-  function b2() constant returns (int8 temp, address addr, uint value) {
-    temp = bettor2.temperature;
-    addr = bettor2.addr;
-    value = bettor2.value;
-    return;
-  }
-
-  function b1() constant returns (int8 temp, address addr, uint value) {
-    temp = bettor1.temperature;
-    addr = bettor1.addr;
-    value = bettor1.value;
-    return;
+  function() {
+    msg.sender.send(msg.value);
   }
 
   function payWinner() external {
