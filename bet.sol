@@ -33,7 +33,6 @@ contract WeatherBet {
 
   uint private betEndTime;
 
-  // 0x56f4a306023c0932717d55405d50ce72da2cd688 in test net
   TemperatureOracle private tempOracle;
 
   function abs(int8 n) internal constant returns (int8) {
@@ -59,10 +58,6 @@ contract WeatherBet {
     bettor2.addr = _bettor2;
     bettor1.temperature = 0;
     bettor2.temperature = 0;
-  }
-
-  function() {
-    msg.sender.send(msg.value);
   }
 
   function payWinner() external {
@@ -115,4 +110,10 @@ contract WeatherBet {
       msg.sender.send(msg.value);
     }
   }
+
+  // automatically reimburse all ether that was directly sent to the contract outside of betOn()
+  function() {
+    msg.sender.send(msg.value);
+  }
+
 }
