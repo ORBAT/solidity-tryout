@@ -107,7 +107,7 @@ contract WeatherBet {
       bettor1.temperature = temperature;
       bettor1.value = msg.value;
     } else if(msg.sender == bettor2.addr) {      
-      // message was sent by bettor 1
+      // message was sent by bettor 2
       bettor2.temperature = temperature;
       bettor2.value = msg.value;
     } else {
