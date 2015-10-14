@@ -60,6 +60,27 @@ contract WeatherBet {
     bettor2.temperature = 0;
   }
 
+  function betOn(int8 temperature) external {
+    if(winnerPaid || now > betEndTime) {
+      // bet already over, reimburse sent value
+      msg.sender.send(msg.value);
+      return;
+    }
+    
+    if(msg.sender == bettor1.addr) {
+      // message was sent by bettor 1
+      bettor1.temperature = temperature;
+      bettor1.value += msg.value;
+    } else if(msg.sender == bettor2.addr) {      
+      // message was sent by bettor 2
+      bettor2.temperature = temperature;
+      bettor2.value += msg.value;
+    } else {
+      // message wasn't sent by either bettor, return the money.
+      msg.sender.send(msg.value);
+    }
+  }
+
   function payWinner() external {
     // the bet still has time left
     if(now < betEndTime) return;
@@ -87,29 +108,8 @@ contract WeatherBet {
     }
     
     winnerPaid = true;
-    return;
   }
 
-  function betOn(int8 temperature) external {
-    if(winnerPaid || now > betEndTime) {
-      // bet already over, reimburse sent value
-      msg.sender.send(msg.value);
-      return;
-    }
-    
-    if(msg.sender == bettor1.addr) {
-      // message was sent by bettor 1
-      bettor1.temperature = temperature;
-      bettor1.value = msg.value;
-    } else if(msg.sender == bettor2.addr) {      
-      // message was sent by bettor 2
-      bettor2.temperature = temperature;
-      bettor2.value = msg.value;
-    } else {
-      // message wasn't sent by either bettor, return the money.
-      msg.sender.send(msg.value);
-    }
-  }
 
   // automatically reimburse all ether that was directly sent to the contract outside of betOn()
   function() {
