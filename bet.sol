@@ -1,3 +1,5 @@
+// Both of these contracts are extremely simplified, and were written for demonstration purposes.
+
 contract TemperatureOracle {
   mapping (uint => int8) hourlyTemperatures;
   
@@ -35,18 +37,13 @@ contract WeatherBet {
 
   TemperatureOracle private tempOracle;
 
-  function abs(int8 n) internal constant returns (int8) {
-    if(n >= 0) return n;
-    return -n;
-  }
-
   // end bet and reimburse both bets
   function kill() external {
     // only bettor1 or bettor2 can end the bet
     if(msg.sender != bettor1.addr && msg.sender != bettor2.addr) return;
     bettor1.addr.send(bettor1.value);
     bettor2.addr.send(bettor2.value);
-    suicide();
+    suicide(msg.sender);
   }
 
   // Create a new weather bet between bettor1 and bettor2 that will be resolved at _betEndTime
@@ -67,18 +64,23 @@ contract WeatherBet {
       return;
     }
     
-    if(msg.sender == bettor1.addr) {
+    if(msg.sender == bettor1.addr && bettor1.value != 0) {
       // message was sent by bettor 1
       bettor1.temperature = temperature;
-      bettor1.value += msg.value;
-    } else if(msg.sender == bettor2.addr) {      
+      bettor1.value = msg.value;
+    } else if(msg.sender == bettor2.addr && bettor2.value != 0) {
       // message was sent by bettor 2
       bettor2.temperature = temperature;
-      bettor2.value += msg.value;
+      bettor2.value = msg.value;
     } else {
-      // message wasn't sent by either bettor, return the money.
-      msg.sender.send(msg.value);
+      // message wasn't sent by either bettor, abort the transaction
+      throw;
     }
+  }
+
+  function abs(int8 n) internal constant returns (int8) {
+    if(n >= 0) return n;
+    return -n;
   }
 
   function payWinner() external {
@@ -86,6 +88,9 @@ contract WeatherBet {
     if(now < betEndTime) return;
     // the bet's already over and winner has been paid
     if(winnerPaid) return;
+
+    // note that bettor1 or bettor2 may not have bet yet, but we don't
+    // check for that to keep the code simple
 
     int8 temperature = tempOracle.get(betEndTime);
 
