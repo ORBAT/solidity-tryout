@@ -1,4 +1,5 @@
-// Both of these contracts are extremely simplified, and were written for demonstration purposes.
+// Both of these contracts are extremely simplified, and were written for demonstration purposes only, not as
+// examples of good coding practices
 
 contract TemperatureOracle {
   mapping (uint => int8) hourlyTemperatures;
@@ -64,14 +65,14 @@ contract WeatherBet {
       return;
     }
     
-    if(msg.sender == bettor1.addr && bettor1.value != 0) {
+    if(msg.sender == bettor1.addr) {
       // message was sent by bettor 1
       bettor1.temperature = temperature;
-      bettor1.value = msg.value;
-    } else if(msg.sender == bettor2.addr && bettor2.value != 0) {
+      bettor1.value += msg.value;
+    } else if(msg.sender == bettor2.addr) {      
       // message was sent by bettor 2
       bettor2.temperature = temperature;
-      bettor2.value = msg.value;
+      bettor2.value += msg.value;
     } else {
       // message wasn't sent by either bettor, abort the transaction
       throw;
