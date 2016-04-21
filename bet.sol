@@ -116,9 +116,9 @@ contract WeatherBet {
   }
 
 
-  // automatically reimburse all ether that was directly sent to the contract outside of betOn()
+  // abort all transactions sent to the contract outside of betOn()
   function() {
-    msg.sender.send(msg.value);
+    throw;
   }
 
 }
